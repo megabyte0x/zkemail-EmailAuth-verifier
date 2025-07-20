@@ -1,5 +1,3 @@
-mod verifier;
-
 use verifier::verify;
 
 fn main() {

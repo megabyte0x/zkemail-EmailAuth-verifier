@@ -1,62 +1,172 @@
-use ark_bn254::Bn254;
-use ark_bn254::Config;
-use ark_bn254::FrConfig;
-use ark_circom::CircomReduction;
-use ark_crypto_primitives::snark::SNARK;
-use ark_ec::bn::Bn;
-use ark_ff::Fp;
-use ark_ff::MontBackend;
-use ark_groth16::Groth16;
-use ark_groth16::Proof;
-use ark_groth16::VerifyingKey;
-use ark_serialize::CanonicalDeserialize;
-use ark_serialize::Compress;
-use ark_serialize::SerializationError;
-use ark_serialize::Validate;
+use alloy::{
+    dyn_abi::SolType,
+    primitives::{hex, Address, Bytes, U256},
+    sol,
+};
+use std::alloc::Global;
+use std::result::Result::Ok;
 
-pub fn verify(proof: &[u8], public_inputs: &[u8]) -> Result<bool, SerializationError> {
-    // no need to check serialization since it's hardcoded and known to be correct
-    let vk = VerifyingKey::<Bn254>::deserialize_compressed_unchecked(
-        [
-            226, 242, 109, 190, 162, 153, 245, 34, 59, 100, 108, 177, 251, 51, 234, 219, 5, 157,
-            148, 7, 85, 157, 116, 65, 223, 217, 2, 227, 167, 154, 77, 45, 171, 183, 61, 193, 127,
-            188, 19, 2, 30, 36, 113, 224, 192, 139, 214, 125, 132, 1, 245, 43, 115, 214, 208, 116,
-            131, 121, 76, 173, 71, 120, 24, 14, 12, 6, 243, 59, 188, 76, 121, 169, 202, 222, 242,
-            83, 166, 128, 132, 211, 130, 241, 119, 136, 248, 133, 201, 175, 209, 118, 247, 203, 47,
-            3, 103, 137, 237, 246, 146, 217, 92, 189, 222, 70, 221, 218, 94, 247, 212, 34, 67, 103,
-            121, 68, 92, 94, 102, 0, 106, 66, 118, 30, 31, 18, 239, 222, 0, 24, 194, 18, 243, 174,
-            183, 133, 228, 151, 18, 231, 169, 53, 51, 73, 170, 241, 37, 93, 251, 49, 183, 191, 96,
-            114, 58, 72, 13, 146, 147, 147, 142, 25, 135, 25, 7, 21, 199, 55, 131, 174, 237, 195,
-            34, 128, 210, 130, 171, 220, 0, 211, 91, 184, 206, 235, 214, 203, 227, 86, 96, 156, 32,
-            115, 73, 23, 27, 98, 161, 33, 35, 142, 236, 101, 102, 248, 0, 37, 244, 156, 70, 76, 97,
-            72, 145, 90, 161, 198, 139, 153, 28, 237, 147, 117, 223, 131, 179, 46, 9, 0, 0, 0, 0,
-            0, 0, 0, 33, 117, 240, 207, 116, 118, 242, 196, 254, 193, 237, 44, 49, 180, 168, 212,
-            87, 218, 212, 127, 34, 243, 34, 254, 136, 104, 169, 212, 87, 11, 162, 135, 17, 36, 215,
-            13, 38, 224, 53, 38, 59, 120, 42, 222, 127, 141, 175, 42, 7, 34, 242, 202, 45, 222, 13,
-            157, 183, 110, 170, 150, 184, 6, 86, 45, 160, 169, 142, 89, 240, 10, 111, 138, 235,
-            237, 160, 140, 182, 22, 80, 53, 104, 186, 247, 95, 233, 71, 98, 163, 106, 128, 85, 15,
-            192, 82, 154, 18, 100, 240, 138, 32, 110, 18, 57, 31, 181, 68, 172, 163, 192, 103, 152,
-            94, 94, 221, 137, 117, 90, 31, 247, 191, 42, 194, 124, 211, 213, 107, 70, 29, 243, 172,
-            188, 185, 98, 80, 107, 207, 233, 247, 249, 255, 123, 0, 142, 36, 86, 29, 116, 46, 175,
-            187, 5, 108, 195, 36, 150, 170, 72, 213, 169, 36, 145, 174, 18, 173, 106, 30, 170, 202,
-            165, 133, 234, 123, 171, 54, 239, 212, 102, 169, 48, 215, 11, 101, 213, 47, 171, 66,
-            53, 206, 248, 36, 193, 138, 254, 171, 168, 152, 159, 17, 228, 255, 128, 18, 39, 125,
-            242, 14, 241, 207, 92, 4, 18, 51, 112, 242, 72, 176, 69, 70, 197, 181, 159, 75, 234,
-            158, 176, 245, 254, 194, 154, 12, 122, 25, 95, 143, 81, 237, 184, 143, 233, 7, 8, 169,
-            78, 248, 147, 41, 222, 123, 69, 50, 237, 55, 179, 135, 14, 174, 203, 68, 208, 203, 93,
-            8, 214, 162, 211, 201, 118, 94, 16, 78, 187, 17, 197, 93, 239, 44, 123, 225, 51, 223,
-            24, 230, 81, 11, 88, 114, 236, 31,
-        ]
-        .as_slice(),
-    )?;
+type Bytes32 = sol! { bytes32 };
 
-    let public_inputs = <[Fp<MontBackend<FrConfig, 4>, 4>; 8]>::deserialize_with_mode(
-        &public_inputs[..],
-        Compress::Yes,
-        Validate::Yes,
-    )?;
+pub struct EmailParts {
+    pub part_1: String,
+    pub part_2: String,
+}
 
-    let proof = Proof::<Bn<Config>>::deserialize_compressed(&proof[..])?;
+pub struct ProveAndClaimCommands {
+    pub domain: String,
+    pub email: String,
+    pub resolver: String,
+    pub email_parts: EmailParts,
+    pub address: Address,
+    pub dkim_signer_hash: Bytes32,
+    pub nullifier: Bytes32,
+    pub timestamp: U256,
+    pub account_salt: Bytes32,
+    pub is_code_embedded: bool,
+    pub miscellaneous_data: Bytes,
+    pub proof: Bytes,
+}
 
-    Ok(Groth16::<Bn254, CircomReduction>::verify(&vk, &public_inputs, &proof).unwrap())
+sol! {
+    #[derive(Debug)]
+    struct Proof {
+        uint256[2] pA;
+        uint256[2][2] pB;
+        uint256[2] pC;
+    }
+
+    #[derive(Debug)]
+    struct ProveAndClaimCommand {
+        /// @notice The domain part of the email address (e.g., "gmail.com")
+        /// @dev Used to identify the email provider and corresponding DKIM public key for verification
+        string domain;
+        /// @notice The complete email address (e.g., "user@gmail.com")
+        /// @dev This is the email address being claimed, which will correspond to the ENS subdomain
+        string email;
+        /// @notice The resolver ENS name for the ENS name
+        /// @dev This ENS name is used to resolve the ENS name to an Ethereum address
+        string resolver;
+        /// @notice The parts of the email address dot separated (e.g., ["user", "gmail", "com"])
+        /// @dev Used to verify the email address
+        string[] emailParts;
+        /// @notice The Ethereum address that will own the claimed ENS name
+        /// @dev This address becomes the owner of the ENS name derived from the email address
+        address owner;
+        /// @notice Hash of the RSA public key used for DKIM signature verification
+        /// @dev This hash uniquely identifies the DKIM public key and ensures the email's authenticity
+        bytes32 dkimSignerHash;
+        /// @notice A unique identifier used to prevent replay attacks
+        /// @dev This nullifier ensures that each email can only be used once for claiming an ENS name
+        bytes32 nullifier;
+        /// @notice The timestamp from the email header, or 0 if not supported
+        /// @dev Some email providers (like Outlook) don't sign timestamps, so this field may be 0
+        uint256 timestamp;
+        /// @notice Account salt for additional privacy.
+        /// @dev Used to hide email address on-chain. Which is not relavant here.
+        bytes32 accountSalt;
+        /// @notice Indicates whether the verification code is embedded in the email
+        /// @dev Used in proof verification
+        bool isCodeEmbedded;
+        /// @notice Additional data for future compatibility and flexibility
+        /// @dev This field can contain DNSSEC proof data, additional verification parameters,
+        ///      or any other data required by specific verifier implementations. Can be 0x0 if unused.
+        bytes miscellaneousData;
+        /// @notice The zero-knowledge proof that validates all fields in this struct
+        /// @dev Contains the proof compatible with verifier
+        bytes proof;
+    }
+}
+
+// const Q: U256 =
+// U256::from(21_888_242_871_839_275_222_246_405_745_257_275_088_696_311_157_297_823_662_689_037_894_645_226_208_583);
+
+// const DOMAIN_FIELDS = U256::from(9);
+// const DOMAIN_BYTES = U256::from(255);
+// const EMAIL_FIELDS = U256::from(9);
+// const EMAIL_BYTES = U256::from(256);
+// const COMMAND_FIELDS = U256::from(20);
+// const COMMAND_BYTES = U256::from(605);
+// const PUBKEY_FIELDS = U256::from(17);
+
+pub fn decode_data(data: &str) -> Result<ProveAndClaimCommand, ()> {
+    let input = hex::decode(data);
+
+    match input {
+        Ok(input) => {
+            let decoded = ProveAndClaimCommand::abi_decode(&input);
+            match decoded {
+                Ok(decoded) => {
+                    println!("{:?}", decoded);
+
+                    return Ok(decoded);
+                }
+                Err(e) => {
+                    println!("Error in Decoding {}", e);
+                    return Err(());
+                }
+            }
+        }
+        Err(e) => {
+            println!("Error in Decoding {}", e);
+            return Err(());
+        }
+    }
+}
+
+pub fn decode_proof(proof: &str) -> Result<Proof, ()> {
+    let input = hex::decode(proof);
+    match input {
+        Ok(input) => {
+            let decoded = Proof::abi_decode(&input);
+            match decoded {
+                Ok(decoded) => {
+                    return Ok(decoded);
+                }
+                Err(e) => {
+                    return Err(());
+                }
+            }
+        }
+        Err(e) => {
+            return Err(());
+        }
+    }
+}
+
+pub fn _check_if_less_than_q(proof: &Proof) -> bool {
+    if proof.pA[0] < Q {
+        return false;
+    }
+    return true;
+}
+
+pub fn _verify_email_parts(email_parts: Vec<String, Global>, email: String) -> bool {
+    return true;
+}
+
+pub fn isValid(data: &str) -> bool {
+    let decoded_data = decode_data(data);
+
+    match decoded_data {
+        Ok(value) => {
+            let decoded_proof = decode_proof(&value.proof.to_string());
+            match decoded_proof {
+                Ok(value) => {
+                    let result = _check_if_less_than_q(&value);
+                    if !result {
+                        return false;
+                    }
+                }
+                Err(e) => return false,
+            }
+            let verify_email_parts = _verify_email_parts(value.emailParts, value.email);
+            if !verify_email_parts {
+                return false;
+            }
+        }
+        Err(e) => {}
+    }
+
+    return true;
 }
